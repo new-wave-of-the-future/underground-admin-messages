@@ -1,49 +1,75 @@
 import urllib.request
+import re
 from html.parser import HTMLParser
 
 
-class NestedParser(HTMLParser):
+class CleanFullParser(HTMLParser):
     def __init__(self, target_id):
         super().__init__()
         self.target_id = target_id
-        self.found_announce = False
-        self.depth_count = 0
-        self.target_depth = 3
-        self.result_text = None
-        self.capture_text = False
+        self.recording = False
+        self.nesting_level = 0
+        self.captured_html = []
+        # Tags we usually want to ignore inside an announcement
+        self.ignore_tags = {"script", "style", "meta"}
+        self.current_tag_ignored = False
 
     def handle_starttag(self, tag, attrs):
         attrs_dict = dict(attrs)
 
-        # 1. Look for the element with id='announce'
         if attrs_dict.get("id") == self.target_id:
-            self.found_announce = True
+            self.recording = True
+            self.nesting_level = 1
             return
 
-        # 2. If we are inside 'announce', track the first nested child for 3 iterations
-        if self.found_announce and self.depth_count < self.target_depth:
-            self.depth_count += 1
-            if self.depth_count == self.target_depth:
-                self.capture_text = True
+        if self.recording:
+            self.nesting_level += 1
+            if tag in self.ignore_tags:
+                self.current_tag_ignored = True
+                return
+
+            attr_str = "".join([f' {k}="{v}"' for k, v in attrs])
+            self.captured_html.append(f"<{tag}{attr_str}>")
+
+    def handle_endtag(self, tag):
+        if self.recording:
+            self.nesting_level -= 1
+            if self.nesting_level == 0:
+                self.recording = False
+            elif tag in self.ignore_tags:
+                self.current_tag_ignored = False
+            else:
+                self.captured_html.append(f"</{tag}>")
 
     def handle_data(self, data):
-        # 3. Get the text of the 3rd nested element
-        if self.capture_text and self.result_text is None:
-            self.result_text = data.strip()
+        if self.recording and not self.current_tag_ignored:
+            # Clean up excessive whitespace/newlines within the text
+            clean_data = re.sub(r"\s+", " ", data)
+            if clean_data.strip():
+                self.captured_html.append(clean_data)
+
+    def get_content(self):
+        raw_html = "".join(self.captured_html).strip()
+        # Final pass: remove empty lines and fix spacing between tags
+        return re.sub(r">\s+<", "><", raw_html)
 
 
-def scrape_nested_element(url):
+def scrape_and_clean(url):
     try:
-        with urllib.request.urlopen(url) as response:
+        # Headers help avoid 403 Forbidden errors
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        req = urllib.request.Request(url, headers=headers)
+
+        with urllib.request.urlopen(req) as response:
             html_content = response.read().decode("utf-8")
 
-        parser = NestedParser("announce")
+        parser = CleanFullParser("announce")
         parser.feed(html_content)
-
-        return parser.result_text
+        return parser.get_content()
     except Exception as e:
         return f"Error: {e}"
 
 
 # Usage
-print(scrape_nested_element("https://underground.boardhost.com/index.php"))
+final_html = scrape_and_clean("https://underground.boardhost.com/index.php")
+print(final_html)
