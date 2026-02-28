@@ -15,7 +15,7 @@ echo "Starting scraper loop... Press [CTRL+C] to stop."
 
 while true
 do
-    echo "[$ (date)] Running scraper..."
+    echo "[$(date)] Running scraper..."
     
     # 1. Run the python script
     python3 "$PYTHON_SCRIPT" > "$OUTPUT_FILE"
