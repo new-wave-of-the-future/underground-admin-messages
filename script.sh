@@ -7,7 +7,7 @@ git config --global user.email "41898282+github-actions[bot]@users.noreply.githu
 REPO_DIR="."
 PYTHON_SCRIPT="run.py"
 OUTPUT_FILE="msg.txt"
-INTERVAL=1 # Seconds
+INTERVAL=60 # Seconds
 
 cd "$REPO_DIR" || exit
 
